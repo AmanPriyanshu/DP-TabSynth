@@ -1,25 +1,27 @@
 import torch
+#criterion = torch.nn.CrossEntropyLoss()
+class GeneratorModel(torch.nn.Module):
+    def __init__(self, vocab_size, embedding_dim):
+        super(GeneratorModel, self).__init__()
+        self.embedding_layer = torch.nn.Embedding(vocab_size, embedding_dim)
+        self.dropout = torch.nn.Dropout(p=0.2)
+        self.rnn = torch.nn.LSTM(embedding_dim, 2*embedding_dim, 2, batch_first=True)
+        self.linearLayer1 = torch.nn.Linear(2*embedding_dim, embedding_dim)
+        self.linearLayer2 = torch.nn.Linear(embedding_dim, vocab_size)
+        self.relu = torch.nn.ReLU()
 
-class RNN(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super(RNN, self).__init__()
-        self.hidden_size = hidden_size
+    def forward(self, x):
+        x = self.embedding_layer(x)
+        x = self.dropout(x)
+        x, hidden = self.rnn(x)
+        x = self.dropout(x)
+        x = torch.mean(x, 1)
+        x = self.linearLayer1(x)
+        x = self.relu(x)
+        x = self.linearLayer2(x)
+        return x
 
-        self.i2h = torch.nn.Linear(input_size + hidden_size, hidden_size)
-        self.i2o = torch.nn.Linear(input_size + hidden_size, output_size)
-        self.o2o = torch.nn.Linear(hidden_size + output_size, output_size)
-        self.dropout = torch.nn.Dropout(0.1)
-        self.softmax = torch.nn.LogSoftmax(dim=1)
-
-    def forward(self, input, hidden):
-        input_combined = torch.cat((input, hidden), 1)
-        hidden = self.i2h(input_combined)
-        output = self.i2o(input_combined)
-        output_combined = torch.cat((hidden, output), 1)
-        output = self.o2o(output_combined)
-        output = self.dropout(output)
-        output = self.softmax(output)
-        return output, hidden
-
-    def initHidden(self):
-        return torch.zeros(1, self.hidden_size)
+if __name__ == '__main__':
+    x =torch.tensor([[0, 1, 2, 3, 4, 0, 1]])
+    model = GeneratorModel(5, 10)
+    print(model(x).shape)
