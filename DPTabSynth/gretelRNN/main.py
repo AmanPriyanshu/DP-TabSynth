@@ -15,9 +15,16 @@ class TabDataset(torch.utils.data.Dataset):
 	def __getitem__(self, idx):
 		return self.x[idx], self.y[idx]
 
+def isfloat(n):
+	try:
+		n = float(n)
+		return True
+	except:
+		return False
 
 class Runner:
-	def __init__(self, file_path, batch_size=16, input_dim=20, shuffle=True, embedding_dim=10, lr=0.001):
+	def __init__(self, file_path, batch_size=16, input_dim=20, shuffle=True, embedding_dim=10, lr=0.001, cat_based=False):
+		self.cat_based = cat_based
 		self.input_dim = input_dim
 		self.shuffle = shuffle
 		self.batch_size = batch_size
@@ -42,7 +49,7 @@ class Runner:
 		self.criterion = torch.nn.CrossEntropyLoss()
 
 	def get_model(self):
-		return GeneratorModel(len(self.vocab), 24)
+		return GeneratorModel(len(self.vocab), 24, self.input_dim)
 
 	def read_data_in_format(self):
 		df = pd.read_csv(self.file_path)
@@ -55,7 +62,19 @@ class Runner:
 				pass
 		with open(self.file_path, "r") as f:
 			dat = "\n".join([i.strip() for i in f.readlines()][1:])
-			return dat
+		if self.cat_based:
+			new_line_dat = dat.split('\n')
+			dat = []
+			for d in new_line_dat:
+				for i in d.split(','):
+					if isfloat(i):
+						dat.extend([ch for ch in i])
+					else:
+						dat.append(i)
+					dat.append(',')
+				dat = dat[:-1]
+				dat.append('\n')
+		return dat
 
 	def create_batched_dataset(self):
 		tokens = [self.chr2idx[i] for i in self.data]
@@ -124,6 +143,7 @@ class Runner:
 		sep_count = 0
 		bar = tqdm(desc="Generating",total=rows-1)
 		count_from_prev_sep = 0
+		retries = 0
 		while(True):
 			x = torch.from_numpy(np.array([input_x])).to(self.device)
 			out = self.model(x)
@@ -139,8 +159,12 @@ class Runner:
 			else:
 				count_from_prev_sep +=1
 			if count_from_prev_sep==1000:
-				print("Error can't come to next row exit")
-				exit()
+				print("Error can't come to next row exit. Re-initializing")
+				retries += 1
+				input_x = self.x[np.random.choice(np.arange(len(self.x)))].tolist()
+				count_from_prev_sep = 0
+				if retries==4:
+					break
 			if sep_count==rows:
 				break
 		bar.close()
