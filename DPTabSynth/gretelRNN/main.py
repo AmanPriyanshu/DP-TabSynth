@@ -46,7 +46,7 @@ class Runner:
 		self.optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)#torch.optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
 		self.scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, 'min')
 		self.x, self.y = self.create_batched_dataset()
-		self.criterion = torch.nn.CrossEntropyLoss()
+		self.criterion = torch.nn.CrossEntropyLoss(weight=torch.tensor([1.0 if i not in ['\n', ','] else len(self.vocab)-2 for i in self.vocab]).to(self.device))
 
 	def get_model(self):
 		return GeneratorModel(len(self.vocab), 24, self.input_dim)
@@ -85,6 +85,8 @@ class Runner:
 
 	def fit(self, num_samples, epochs, prev_state_return=True, continue_train=False):
 		self.model.train()
+		if num_samples==-1:
+			num_samples = len(self.x)
 		self.x = torch.from_numpy(self.x[:num_samples])
 		self.y = torch.from_numpy(self.y[:num_samples])
 		self.y = self.y.long()
@@ -133,7 +135,13 @@ class Runner:
 		self.model = torch.load("best_model.pt")
 		return self.model
 
-	def generate_synthetics(self, rows=1000, input_x=None, sep='\n'):
+	def generate_synthetics(self, rows=1000, input_x=None, sep='\n', nn=10):
+		data = ""
+		for _ in range(0, rows, nn):
+			data += self.generate_synthetics_sep(nn, input_x, sep)
+		return data
+
+	def generate_synthetics_sep(self, rows=1000, input_x=None, sep='\n'):
 		rows = rows+1
 		if input_x is None:
 			input_x = self.x[np.random.choice(np.arange(len(self.x)))]
